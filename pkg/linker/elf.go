@@ -7,6 +7,7 @@ import (
 
 const EhdrSize = int(unsafe.Sizeof(Ehdr{}))
 const ShdrSize = int(unsafe.Sizeof(Shdr{}))
+const SymSize = int(unsafe.Sizeof(Sym{}))
 
 type Ehdr struct {
 	Ident     [16]uint8
