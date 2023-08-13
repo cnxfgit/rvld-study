@@ -34,7 +34,9 @@ func main() {
 	}
 
 	linker.ReadInputFiles(ctx, remaining)
-	fmt.Printf("%v\n", len(ctx.Objs))
+	println(len(ctx.Objs))
+	linker.ResolveSymbols(ctx)
+	println(len(ctx.Objs))
 }
 
 func parseArgs(ctx *linker.Context) []string {

@@ -2,6 +2,7 @@ package linker
 
 import (
 	"bytes"
+	"debug/elf"
 	"rvld/pkg/utils"
 	"strconv"
 	"strings"
@@ -92,6 +93,16 @@ type Sym struct {
 	Val   uint64
 	Size  uint64
 }
+
+func (s *Sym) IsAbs() bool {
+	 return s.Shndx == uint16(elf.SHN_ABS)
+}
+
+
+func (s *Sym) IsUndef() bool {
+	return s.Shndx == uint16(elf.SHN_UNDEF)
+} 
+
 
 func ElfGetName(strTab []byte, offset uint32) string {
 	length := uint32(bytes.Index(strTab[offset:], []byte{0}))
