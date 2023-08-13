@@ -33,7 +33,8 @@ func main() {
 		utils.Fatal("unknown emulation type")
 	}
 
-	fmt.Printf("%v\n", remaining)
+	linker.ReadInputFiles(ctx, remaining)
+	fmt.Printf("%v\n", len(ctx.Objs))
 }
 
 func parseArgs(ctx *linker.Context) []string {

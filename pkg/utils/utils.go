@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"runtime/debug"
+	"strings"
 )
 
 func Fatal(v any) {
@@ -20,7 +21,7 @@ func MustNo(err error) {
 	}
 }
 
-func Assert(condition bool){
+func Assert(condition bool) {
 	if !condition {
 		Fatal("assert fail")
 	}
@@ -31,4 +32,12 @@ func Read[T any](data []byte) (val T) {
 	err := binary.Read(reader, binary.LittleEndian, &val)
 	MustNo(err)
 	return
+}
+
+func RemovePrefix(s, prefix string) (string, bool) {
+	if strings.HasPrefix(s, prefix) {
+		s = strings.TrimPrefix(s, prefix)
+		return s, true
+	}
+	return s, false
 }
