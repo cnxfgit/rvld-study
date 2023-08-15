@@ -41,3 +41,9 @@ func MarkLiveObjects(ctx *Context) {
 		roots = roots[1:]
 	}
 }
+
+func RegisterSectionPieces(ctx *Context) {
+	for _, file := range ctx.Objs {
+		file.RegisterSectionPieces()
+	}
+}

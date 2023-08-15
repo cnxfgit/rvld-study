@@ -34,6 +34,17 @@ func Read[T any](data []byte) (val T) {
 	return
 }
 
+func ReadSlice[T any](data []byte, sz int) []T {
+	nums := len(data) / sz
+	res := make([]T, nums)
+	for nums > 0 {
+		res = append(res, Read[T](data))
+		data = data[sz:]
+		nums--
+	}
+	return res
+}
+
 func RemovePrefix(s, prefix string) (string, bool) {
 	if strings.HasPrefix(s, prefix) {
 		s = strings.TrimPrefix(s, prefix)
@@ -42,7 +53,7 @@ func RemovePrefix(s, prefix string) (string, bool) {
 	return s, false
 }
 
-func RemoveIf[T any](elems []T, condition func(T) bool) []T  {
+func RemoveIf[T any](elems []T, condition func(T) bool) []T {
 	i := 0
 	for _, elem := range elems {
 		if condition(elem) {
@@ -53,4 +64,14 @@ func RemoveIf[T any](elems []T, condition func(T) bool) []T  {
 	}
 
 	return elems[:i]
+}
+
+
+func AllZero(bs []byte) bool {
+	b := byte(0)
+	for _, s := range bs {
+		b |= s
+	}
+
+	return b == 0
 }

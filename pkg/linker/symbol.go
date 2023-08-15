@@ -3,24 +3,31 @@ package linker
 import "rvld/pkg/utils"
 
 type Symbol struct {
-	File         *ObjectFile
-	InputSection *InputSection
-	Name         string
-	Value        uint64
-	SymIdx       int
-}
+	File   *ObjectFile
+	Name   string
+	Value  uint64
+	SymIdx int
 
+	InputSection    *InputSection
+	SectionFragment *SectionFragment
+}
 
 func NewSymbol(name string) *Symbol {
 	s := &Symbol{Name: name}
 	return s
 }
 
-func (s *Symbol) SetInputSection(isec *InputSection)  {
-	 s.InputSection = isec
+func (s *Symbol) SetInputSection(isec *InputSection) {
+	s.InputSection = isec
+	s.SectionFragment = nil
 }
 
-func GetSymbolByName(ctx *Context, name string) *Symbol  {
+func (s *Symbol) SetSectionFragment(frag *SectionFragment) {
+	s.InputSection = nil
+	s.SectionFragment = frag
+}
+
+func GetSymbolByName(ctx *Context, name string) *Symbol {
 	if sym, ok := ctx.SymbolMap[name]; ok {
 		return sym
 	}
@@ -29,12 +36,12 @@ func GetSymbolByName(ctx *Context, name string) *Symbol  {
 	return ctx.SymbolMap[name]
 }
 
-func (s *Symbol) ElfSym() *Sym{
+func (s *Symbol) ElfSym() *Sym {
 	utils.Assert(s.SymIdx < len(s.File.ElfSyms))
 	return &s.File.ElfSyms[s.SymIdx]
 }
 
-func (s *Symbol) Clear()  {
+func (s *Symbol) Clear() {
 	s.File = nil
 	s.InputSection = nil
 	s.SymIdx = -1

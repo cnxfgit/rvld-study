@@ -95,14 +95,16 @@ type Sym struct {
 }
 
 func (s *Sym) IsAbs() bool {
-	 return s.Shndx == uint16(elf.SHN_ABS)
+	return s.Shndx == uint16(elf.SHN_ABS)
 }
-
 
 func (s *Sym) IsUndef() bool {
 	return s.Shndx == uint16(elf.SHN_UNDEF)
-} 
+}
 
+func (s *Sym) IsCommon() bool {
+	return s.Shndx == uint16(elf.SHN_COMMON)
+}
 
 func ElfGetName(strTab []byte, offset uint32) string {
 	length := uint32(bytes.Index(strTab[offset:], []byte{0}))
