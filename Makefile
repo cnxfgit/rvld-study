@@ -14,6 +14,7 @@ test: build
 clean:
 	go clean
 	rm -rf out/
+	rm -rf ld
 
  $(TESTS):
 	@echo "Testing" $@
