@@ -73,6 +73,7 @@ func CreateSyntheticSections(ctx *Context) {
 	}
 
 	ctx.Ehdr = push(NewOutputEhdr()).(*OutputEhdr)
+	ctx.Phdr = push(NewOutputPhdr()).(*OutputPhdr)
 	ctx.Shdr = push(NewOutputShdr()).(*OutputShdr)
 }
 
@@ -144,6 +145,11 @@ func CollectOutputSections(ctx *Context) []Chunker {
 		}
 	}
 
+	for _, osec := range ctx.MergedSections {
+		if osec.Shdr.Size > 0 {
+			osecs = append(osecs, osec)
+		}
+	}
 	return osecs
 }
 
@@ -177,6 +183,9 @@ func SortOutputSection(ctx *Context) {
 		if chunk == ctx.Ehdr {
 			return 0
 		}
+		if chunk == ctx.Phdr {
+			return 1
+		}
 		if typ == uint32(elf.SHT_NOTE) {
 			return 2
 		}
@@ -199,6 +208,12 @@ func SortOutputSection(ctx *Context) {
 	sort.SliceStable(ctx.Chunks, func(i, j int) bool {
 		return rank(ctx.Chunks[i]) < rank(ctx.Chunks[j])
 	})
+}
+
+func ComputeMergedSectionSizes(ctx *Context)  {
+	for _, osec := range ctx.MergedSections {
+		osec.AssignOffsets()
+	}
 }
 
 func isTbss(chunk Chunker) bool {
