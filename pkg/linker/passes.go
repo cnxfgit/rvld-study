@@ -1,8 +1,10 @@
 package linker
 
 import (
+	"debug/elf"
 	"math"
 	"rvld/pkg/utils"
+	"sort"
 )
 
 func CreateInternalFile(ctx *Context) {
@@ -75,12 +77,42 @@ func CreateSyntheticSections(ctx *Context) {
 }
 
 func SetOutputSectionOffsets(ctx *Context) uint64 {
-	fileoff := uint64(0)
+	addr := IMAGE_BASE
+	for _, chunk := range ctx.Chunks {
+		if chunk.GetShdr().Flags&uint64(elf.SHF_ALLOC) == 0 {
+			continue
+		}
 
-	for _, c := range ctx.Chunks {
-		fileoff = utils.AlignTo(fileoff, c.GetShdr().AddrAlign)
-		c.GetShdr().Offset = fileoff
-		fileoff += c.GetShdr().Size
+		addr = utils.AlignTo(addr, chunk.GetShdr().AddrAlign)
+		chunk.GetShdr().Addr = addr
+
+		if !isTbss(chunk) {
+			addr += chunk.GetShdr().Size
+		}
+
+	}
+
+	i := 0
+	first := ctx.Chunks[0]
+	for {
+		shdr := ctx.Chunks[i].GetShdr()
+		shdr.Offset = shdr.Addr - first.GetShdr().Addr
+		i++
+
+		if i >= len(ctx.Chunks) || ctx.Chunks[i].GetShdr().Flags&
+			uint64(elf.SHF_ALLOC) == 0 {
+			break
+		}
+	}
+
+	lastShdr := ctx.Chunks[i-1].GetShdr()
+	fileoff := lastShdr.Offset + lastShdr.Size
+
+	for ; i < len(ctx.Chunks); i++ {
+		shdr := ctx.Chunks[i].GetShdr()
+		fileoff = utils.AlignTo(fileoff, shdr.AddrAlign)
+		shdr.Offset = fileoff
+		fileoff += shdr.Size
 	}
 
 	return fileoff
@@ -130,4 +162,47 @@ func ComputeSectionSizes(ctx *Context) {
 		osec.Shdr.Size = offset
 		osec.Shdr.AddrAlign = 1 << p2align
 	}
+}
+
+func SortOutputSection(ctx *Context) {
+	rank := func(chunk Chunker) int32 {
+		typ := chunk.GetShdr().Type
+		flags := chunk.GetShdr().Flags
+		if flags&uint64(elf.SHF_ALLOC) == 0 {
+			return math.MaxInt32 - 1
+		}
+		if chunk == ctx.Shdr {
+			return math.MaxInt32
+		}
+		if chunk == ctx.Ehdr {
+			return 0
+		}
+		if typ == uint32(elf.SHT_NOTE) {
+			return 2
+		}
+
+		b2i := func(b bool) int {
+			if b {
+				return 1
+			}
+			return 0
+		}
+
+		writeale := b2i(flags&uint64(elf.SHF_WRITE) != 0)
+		notExec := b2i(flags&uint64(elf.SHF_EXECINSTR) == 0)
+		notTls := b2i(flags&uint64(elf.SHF_TLS) == 0)
+		isBss := b2i(typ == uint32(elf.SHT_NOBITS))
+
+		return int32(writeale<<7 | notExec<<6 | notTls<<5 | isBss<<4)
+	}
+
+	sort.SliceStable(ctx.Chunks, func(i, j int) bool {
+		return rank(ctx.Chunks[i]) < rank(ctx.Chunks[j])
+	})
+}
+
+func isTbss(chunk Chunker) bool {
+	shdr := chunk.GetShdr()
+	return shdr.Type == uint32(elf.SHT_NOBITS) &&
+		shdr.Flags&uint64(elf.SHF_TLS) != 0
 }
