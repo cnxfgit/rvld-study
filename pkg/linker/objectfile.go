@@ -3,6 +3,7 @@ package linker
 import (
 	"bytes"
 	"debug/elf"
+	"math"
 	"rvld/pkg/utils"
 )
 
@@ -32,6 +33,7 @@ func (o *ObjectFile) Parse(ctx *Context) {
 	o.InitializeSections(ctx)
 	o.InitializeSymbols(ctx)
 	o.InitializeMergeableSections(ctx)
+	o.SkipEhframeSection()
 
 }
 
@@ -41,7 +43,7 @@ func (o *ObjectFile) InitializeSections(ctx *Context) {
 		shdr := &o.ElfSections[i]
 		switch elf.SectionType(shdr.Type) {
 		case elf.SHT_GROUP, elf.SHT_SYMTAB, elf.SHT_STRTAB,
-			elf.SHT_REL, elf.SHT_NULL:
+			elf.SHT_REL, elf.SHT_RELA, elf.SHT_NULL:
 			break
 		case elf.SHT_SYMTAB_SHNDX:
 			o.FillUpSymtabShndxSec(shdr)
@@ -50,6 +52,19 @@ func (o *ObjectFile) InitializeSections(ctx *Context) {
 			o.Sections[i] = NewInputSection(ctx, name, o, uint32(i))
 		}
 
+	}
+
+	for i := 0; i < len(o.ElfSections); i++ {
+		shdr := &o.InputFile.ElfSections[i]
+		if shdr.Type != uint32(elf.SHT_RELA) {
+			continue
+		}
+
+		utils.Assert(shdr.Info < uint32(len(o.Sections)))
+		if target := o.Sections[shdr.Info]; target != nil {
+			utils.Assert(target.RelsecIdx == math.MaxUint32)
+			target.RelsecIdx = uint32(i)
+		}
 	}
 }
 
@@ -180,7 +195,7 @@ func findNull(data []byte, entSize int) int {
 
 	for i := 0; i <= len(data)-entSize; i += entSize {
 		bs := data[i : i+entSize]
-		if utils.AllZero(bs) {
+		if utils.AllZeros(bs) {
 			return i
 		}
 	}
@@ -261,5 +276,23 @@ func (o *ObjectFile) RegisterSectionPieces() {
 		}
 		sym.SetSectionFragment(frag)
 		sym.Value = uint64(fragOffset)
+	}
+}
+
+func (o *ObjectFile) SkipEhframeSection() {
+	for _, isec := range o.Sections {
+		if isec != nil && isec.IsAlive &&
+			isec.Name() == ".eh_frame" {
+			isec.IsAlive = false
+		}
+	}
+}
+
+func (o *ObjectFile) ScanRelocations() {
+	for _, isec := range o.Sections {
+		if isec != nil && isec.IsAlive &&
+			isec.Shdr().Flags&uint64(elf.SHF_ALLOC) != 0 {
+			isec.ScanRelocations()
+		}
 	}
 }

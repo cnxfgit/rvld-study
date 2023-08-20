@@ -158,7 +158,7 @@ func createPhdr(ctx *Context) []Phdr {
 }
 
 func (o *OutputPhdr) UpdateShdr(ctx *Context) {
-	o.Phdrs = nil
+	o.Phdrs = createPhdr(ctx)
 	o.Shdr.Size = uint64(len(o.Phdrs)) * uint64(PhdrSize)
 }
 

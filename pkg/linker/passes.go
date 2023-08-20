@@ -7,19 +7,6 @@ import (
 	"sort"
 )
 
-func CreateInternalFile(ctx *Context) {
-	obj := &ObjectFile{}
-	ctx.InternalObj = obj
-	ctx.Objs = append(ctx.Objs, obj)
-
-	ctx.InternalEsyms = make([]Sym, 1)
-	obj.Symbols = append(obj.Symbols, NewSymbol(""))
-	obj.FirstGlobal = 1
-	obj.IsAlive = true
-
-	obj.ElfSyms = ctx.InternalEsyms
-}
-
 func ResolveSymbols(ctx *Context) {
 	for _, file := range ctx.Objs {
 		file.ResolveSymbols()
@@ -53,9 +40,11 @@ func MarkLiveObjects(ctx *Context) {
 		if !file.IsAlive {
 			continue
 		}
+
 		file.MarkLiveObjects(func(file *ObjectFile) {
 			roots = append(roots, file)
 		})
+
 		roots = roots[1:]
 	}
 }
@@ -75,6 +64,7 @@ func CreateSyntheticSections(ctx *Context) {
 	ctx.Ehdr = push(NewOutputEhdr()).(*OutputEhdr)
 	ctx.Phdr = push(NewOutputPhdr()).(*OutputPhdr)
 	ctx.Shdr = push(NewOutputShdr()).(*OutputShdr)
+	ctx.Got = push(NewGotSection()).(*GotSection)
 }
 
 func SetOutputSectionOffsets(ctx *Context) uint64 {
@@ -90,7 +80,6 @@ func SetOutputSectionOffsets(ctx *Context) uint64 {
 		if !isTbss(chunk) {
 			addr += chunk.GetShdr().Size
 		}
-
 	}
 
 	i := 0
@@ -100,8 +89,8 @@ func SetOutputSectionOffsets(ctx *Context) uint64 {
 		shdr.Offset = shdr.Addr - first.GetShdr().Addr
 		i++
 
-		if i >= len(ctx.Chunks) || ctx.Chunks[i].GetShdr().Flags&
-			uint64(elf.SHF_ALLOC) == 0 {
+		if i >= len(ctx.Chunks) ||
+			ctx.Chunks[i].GetShdr().Flags&uint64(elf.SHF_ALLOC) == 0 {
 			break
 		}
 	}
@@ -116,6 +105,7 @@ func SetOutputSectionOffsets(ctx *Context) uint64 {
 		fileoff += shdr.Size
 	}
 
+	ctx.Phdr.UpdateShdr(ctx)
 	return fileoff
 }
 
@@ -150,6 +140,7 @@ func CollectOutputSections(ctx *Context) []Chunker {
 			osecs = append(osecs, osec)
 		}
 	}
+
 	return osecs
 }
 
@@ -170,10 +161,11 @@ func ComputeSectionSizes(ctx *Context) {
 	}
 }
 
-func SortOutputSection(ctx *Context) {
+func SortOutputSections(ctx *Context) {
 	rank := func(chunk Chunker) int32 {
 		typ := chunk.GetShdr().Type
 		flags := chunk.GetShdr().Flags
+
 		if flags&uint64(elf.SHF_ALLOC) == 0 {
 			return math.MaxInt32 - 1
 		}
@@ -197,12 +189,12 @@ func SortOutputSection(ctx *Context) {
 			return 0
 		}
 
-		writeale := b2i(flags&uint64(elf.SHF_WRITE) != 0)
+		writeable := b2i(flags&uint64(elf.SHF_WRITE) != 0)
 		notExec := b2i(flags&uint64(elf.SHF_EXECINSTR) == 0)
 		notTls := b2i(flags&uint64(elf.SHF_TLS) == 0)
 		isBss := b2i(typ == uint32(elf.SHT_NOBITS))
 
-		return int32(writeale<<7 | notExec<<6 | notTls<<5 | isBss<<4)
+		return int32(writeable<<7 | notExec<<6 | notTls<<5 | isBss<<4)
 	}
 
 	sort.SliceStable(ctx.Chunks, func(i, j int) bool {
@@ -210,9 +202,32 @@ func SortOutputSection(ctx *Context) {
 	})
 }
 
-func ComputeMergedSectionSizes(ctx *Context)  {
+func ComputeMergedSectionSizes(ctx *Context) {
 	for _, osec := range ctx.MergedSections {
 		osec.AssignOffsets()
+	}
+}
+
+func ScanRelocations(ctx *Context) {
+	for _, file := range ctx.Objs {
+		file.ScanRelocations()
+	}
+
+	syms := make([]*Symbol, 0)
+	for _, file := range ctx.Objs {
+		for _, sym := range file.Symbols {
+			if sym.File == file && sym.Flags != 0 {
+				syms = append(syms, sym)
+			}
+		}
+	}
+
+	for _, sym := range syms {
+		if sym.Flags&NeedsGotTp != 0 {
+			ctx.Got.AddGotTpSymbol(sym)
+		}
+
+		sym.Flags = 0
 	}
 }
 
